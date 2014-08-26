@@ -1,0 +1,7 @@
+classes/
+logs/
+test+test/
+uberjar/
+*.pyc
+*.log
+*.jar
