@@ -5,6 +5,8 @@
 This is a card game, similar to Spades or Hearts, but with no twists to it.  You
 could consider it the parent game that Spades and Hearts come from.
 
+I wrote this as part of a polyglot contest, which allows players to write their client in any programming language, and to put it into the clients folder and connect it by modifying src/tricks/core.clj to use their client.  I currently only have the Python client enabled, but you can switch the Clojure into use by compiling it and adding it to the clients (and commenting out one of the Python clients).
+
 ## Goal
 
 The goal of the game is to win as many tricks as you can.
