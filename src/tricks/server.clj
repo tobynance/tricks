@@ -4,8 +4,6 @@
             [clojure.java.shell :as shell])
   (:use [tricks.cards :only [in?]]))
 
-(def MAX-SCORE 1000)
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defprotocol process-protocol
   (process-read-line [process])
@@ -41,17 +39,14 @@
     (ClientProxy. name process in out [] 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn client-names
-  [game-server]
-  (:client-name-order @game-server))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn clients-in-order
+  "Get the list of clients in play order"
   [game-server]
   (map #(get (:clients @game-server) %) (:client-name-order @game-server)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn broadcast-message
+  "Send a message to every client"
   [game-server message]
   (log/info "Broadcasting message: " message)
   (doseq [client (clients-in-order game-server)]
@@ -59,14 +54,17 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn clients-to-client-map
+  "Convert a list of clients into a map of clients, mapping the client name to the client"
   [clients]
   (zipmap (map :name clients) clients))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn update-play-order
+  "Create a new order for the next trick, maintaining the clockwise
+  order of the players but starting with the player named by 'name'"
   [game-server name]
-  (when (not (= name (first (client-names game-server))))
-    (let [[suffix prefix body] (partition-by #(= % name) (client-names game-server))]
+  (when (not (= name (first (:client-name-order @game-server))))
+    (let [[suffix prefix body] (partition-by #(= % name) (:client-name-order @game-server))]
       (reset! game-server (assoc @game-server :client-name-order (concat prefix body suffix))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -77,7 +75,7 @@
                           (assoc :n-hand 0)
                           (assoc :n-trick 0)
                           (update-in [:client-name-order] shuffle)))
-  (let [names (clojure.string/join "|" (client-names game-server))
+  (let [names (clojure.string/join "|" (:client-name-order @game-server))
         message (str "|INFO|start game|" names "|END|")]
     (broadcast-message game-server message)))
 
@@ -99,11 +97,14 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro time-limited [ms & body]
+  "This is to provide a timeout when communicating with the client, so
+  we don't wait forever for them to respond"
   `(let [f# (future ~@body)]
      (.get f# ~ms java.util.concurrent.TimeUnit/MILLISECONDS)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn query-client
+  "Ask the client what card they want to play, and parse the response"
   [client]
   (log/info (format "Querying client %s for a card" (:name client)))
   (process-write-line client "|QUERY|card|END|")
@@ -112,6 +113,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn valid-card
+  "Checks whether the played card is valid in the current context"
   [card client leading-card]
   (cond
     (not (tricks.cards/valid-card card)) false
@@ -127,7 +129,7 @@
   [game-server]
   (if (not (empty? (:cards (first (clients-in-order game-server)))))
     (do
-      (let [names (clojure.string/join "|" (client-names game-server))
+      (let [names (clojure.string/join "|" (:client-name-order @game-server))
             message (format "|INFO|start trick|%s|%s|END|" (:n-trick @game-server) names)]
         (broadcast-message game-server message))
       (let [played-cards
@@ -199,22 +201,23 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn play-game
-  [game-server]
+  "play hands until a client scores 'max-score' points"
+  [game-server max-score]
   (let [score (high-score (clients-in-order game-server))]
-     (when (< score MAX-SCORE)
+     (when (< score max-score)
        (play-hand game-server)
-       (recur game-server))))
+       (recur game-server max-score))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn run
-  [client-infos]
+  [client-infos max-score]
   (log/info "Server starting up...")
   (let [client-list (map #(apply start-client-proxy %) client-infos)
         client-names (shuffle (map :name client-list))
         clients (clients-to-client-map client-list)
         game-server (atom (Server. clients client-names 0 0))]
     (start-game game-server)
-    (play-game game-server)
+    (play-game game-server max-score)
     (end-game game-server)
     (shutdown-agents)
     (log/info "Server shutting down...")))
