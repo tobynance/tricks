@@ -113,14 +113,13 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn valid-card
   [card client leading-card]
-  (boolean
-      (and
-        (tricks.cards/valid-card card)
-        (in? (:cards client) card)
-        (or
-          (nil? leading-card)
-          (= (second leading-card) (second card))
-          (empty? (filter #(= % (second leading-card)) (map second (:cards client))))))))
+  (cond
+    (not (tricks.cards/valid-card card)) false
+    (not (in? (:cards client) card)) false
+    (nil? leading-card) true
+    (= (second leading-card) (second card)) true
+    (empty? (filter #(= % (second leading-card)) (map second (:cards client)))) true
+    :else false))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn play-tricks
