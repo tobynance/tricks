@@ -1,4 +1,5 @@
-(ns tricks.cards)
+(ns tricks.cards
+  (:use [tricks.utils :only [in?]]))
 
 (def SUITS "HSDC")
 (def FACES "23456789TJQKA")
@@ -24,12 +25,6 @@
 (defn in-same-suit
   [card1 card2]
   (= (second card1) (second card2)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn in?
-  "true if seq contains elem"
-  [seq elem]
-  (some #(= elem %) seq))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn valid-card

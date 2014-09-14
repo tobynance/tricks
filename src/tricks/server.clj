@@ -1,42 +1,11 @@
 (ns tricks.server
   (:require [clojure.tools.logging :as log]
             [tricks.cards]
-            [clojure.java.shell :as shell])
-  (:use [tricks.cards :only [in?]]))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defprotocol process-protocol
-  (process-read-line [process])
-  (process-write-line [process text])
-  (process-close [process]))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defrecord ClientProxy [name ^java.lang.Process process ^java.io.BufferedReader in ^java.io.BufferedWriter out cards score]
-  process-protocol
-  (process-read-line
-    [p]
-    (.readLine in))
-  (process-write-line
-    [p text]
-    (.write out (.trim text))
-    (.write out "\n")
-    (.flush out))
-  (process-close
-    [p]
-    (.destroy process)))
+            [clojure.java.shell :as shell]
+            [tricks.client-proxy :as client-proxy]
+            [tricks.utils :refer [in? time-limited]]))
 
 (defrecord Server [clients client-name-order n-hand n-trick])
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn start-client-proxy
-  "Executes a command-line program, returning a stdout stream and a
-   stdin stream.  Takes a list of strings which represent the command
-   arguments"
-  [name args ^java.io.File dir]
-  (let [process (.exec (Runtime/getRuntime) (reduce str (interleave args (iterate str " "))) nil dir)
-        in (java.io.BufferedReader. (java.io.InputStreamReader. (.getInputStream process) (java.nio.charset.Charset/forName "UTF-8")))
-        out (java.io.BufferedWriter. (java.io.OutputStreamWriter. (.getOutputStream process) (java.nio.charset.Charset/forName "UTF-8")))]
-    (ClientProxy. name process in out [] 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn clients-in-order
@@ -49,8 +18,7 @@
   "Send a message to every client"
   [game-server message]
   (log/info "Broadcasting message: " message)
-  (doseq [client (clients-in-order game-server)]
-    (process-write-line client message)))
+  (client-proxy/broadcast-message (clients-in-order game-server) message))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn clients-to-client-map
@@ -96,19 +64,12 @@
   (apply max (map :score clients)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defmacro time-limited [ms & body]
-  "This is to provide a timeout when communicating with the client, so
-  we don't wait forever for them to respond"
-  `(let [f# (future ~@body)]
-     (.get f# ~ms java.util.concurrent.TimeUnit/MILLISECONDS)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn query-client
   "Ask the client what card they want to play, and parse the response"
   [client]
   (log/info (format "Querying client %s for a card" (:name client)))
-  (process-write-line client "|QUERY|card|END|")
-  (let [response (time-limited 2000 (process-read-line client))]
+  (client-proxy/process-write-line client "|QUERY|card|END|")
+  (let [response (time-limited 2000 (client-proxy/process-read-line client))]
     (nth (.split response "\\|") 3)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -188,7 +149,7 @@
     (let [cards (clojure.string/join " " (:cards client))
           message (format "|INFO|cards|%s|END|" cards)]
       (log/info (format "%s -> %s" (:name client) message))
-      (process-write-line client message)))
+      (client-proxy/process-write-line client message)))
 
   (play-tricks game-server)
   (broadcast-message game-server (format "|INFO|end hand|%s|END|" (:n-hand @game-server)))
@@ -212,7 +173,7 @@
 (defn run
   [client-infos max-score]
   (log/info "Server starting up...")
-  (let [client-list (map #(apply start-client-proxy %) client-infos)
+  (let [client-list (map #(apply client-proxy/start-client-proxy %) client-infos)
         client-names (shuffle (map :name client-list))
         clients (clients-to-client-map client-list)
         game-server (atom (Server. clients client-names 0 0))]

@@ -1,6 +1,7 @@
 (ns tricks.cards-test
   (:require [clojure.test :refer :all]
-            [tricks.cards :refer :all]))
+            [tricks.cards :refer :all]
+            [tricks.utils :refer [in?]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (deftest create-deck-test
