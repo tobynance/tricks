@@ -86,23 +86,25 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn play-trick
-  [game-server clients current-client played]
-  (let [client-name (:name current-client)
-        card (query-client current-client)
-        leading-card (first played)]
-    (if (valid-card card current-client leading-card)
-      (do
-        (broadcast-message game-server (format "|INFO|played|%s|%s|END|" client-name card))
-        (reset! game-server (update-in @game-server [:clients client-name :cards] (fn [cards] (remove #(= % card) cards))))
-        (let [new-played (conj played card)]
-          (if (empty? clients)
-            new-played
-            (recur game-server (rest clients) (first clients) new-played))))
-      (do
-        (log/warn (format "Player %s sent bad card '%s'" client-name card))
-        (broadcast-message game-server (format "|INFO|bad card|%s|%s|END|" client-name card))
-        (reset! game-server (update-in @game-server [:clients client-name :score] #(- % 100)))
-        nil))))
+  [game-server clients]
+  (loop [clients clients
+         played []]
+    (if (empty? clients)
+      played
+      (let [current-client (first clients)
+            client-name (:name current-client)
+            card (query-client current-client)
+            leading-card (first played)]
+        (if (valid-card card current-client leading-card)
+          (do
+            (broadcast-message game-server (format "|INFO|played|%s|%s|END|" client-name card))
+            (reset! game-server (update-in @game-server [:clients client-name :cards] (fn [cards] (remove #(= % card) cards))))
+            (recur (rest clients) (conj played card)))
+          (do
+            (log/warn (format "Player %s sent bad card '%s'" client-name card))
+            (broadcast-message game-server (format "|INFO|bad card|%s|%s|END|" client-name card))
+            (reset! game-server (update-in @game-server [:clients client-name :score] #(- % 100)))
+            nil))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn play-tricks
@@ -113,16 +115,13 @@
       (let [names (clojure.string/join "|" (:client-name-order @game-server))
             message (format "|INFO|start trick|%s|%s|END|" (:n-trick @game-server) names)]
         (broadcast-message game-server message))
-      (let [played-cards (play-trick
-                           game-server
-                           (rest (clients-in-order game-server))
-                           (first (clients-in-order game-server))
-                           [])]
+      (let [clients (clients-in-order game-server)
+            played-cards (play-trick game-server clients)]
         ;;; all cards for trick are now played (or we got back a bad card,
         ;;; so figure out who won.
         (when (not (nil? played-cards))
           (let [winning-card (last (sort-by tricks.cards/face-value (filter #(tricks.cards/in-same-suit % (first played-cards)) played-cards)))
-                winner-name (:name (nth (clients-in-order game-server) (.indexOf played-cards winning-card)))
+                winner-name (:name (nth clients (.indexOf played-cards winning-card)))
                 current-trick (:n-trick @game-server)]
             (reset! game-server (-> @game-server
                                     (update-in [:clients winner-name :score] inc)
