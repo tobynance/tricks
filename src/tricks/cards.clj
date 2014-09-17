@@ -34,3 +34,10 @@
       (= (count card) 2)
       (in? FACES (first card))
       (in? SUITS (second card)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn winning-card
+  [played-cards]
+  (let [in-suit-cards (filter #(in-same-suit % (first played-cards)) played-cards)
+        sorted (sort-by face-value in-suit-cards)]
+    (last sorted)))

@@ -115,7 +115,7 @@
   [game-server]
   (if (nil? (:played game-server))
     game-server
-    (let [winning-card (last (sort-by tricks.cards/face-value (filter #(tricks.cards/in-same-suit % (first (:played game-server))) (:played game-server))))
+    (let [winning-card (tricks.cards/winning-card (:played game-server))
           winner-name (:name (nth (clients-in-order game-server) (.indexOf (:played game-server) winning-card)))
           current-trick (:n-trick game-server)
           winning-score (inc (get-in game-server [:clients winner-name :score]))
