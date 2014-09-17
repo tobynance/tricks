@@ -53,31 +53,6 @@
       (concat prefix body suffix))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn start-game
-  [game-server]
-  (log/info "Starting Game")
-  (let [new-client-name-order (shuffle (:client-name-order game-server))
-        names (clojure.string/join "|" new-client-name-order)
-        message (str "|INFO|start game|" names "|END|")
-        new-game-server (-> game-server
-                            (assoc :n-hand 0)
-                            (assoc :n-trick 0)
-                            (assoc :played [])
-                            (assoc :client-name-order new-client-name-order))]
-    (broadcast-message game-server message)
-    new-game-server))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn end-game
-  [game-server]
-  (log/info "Ending Game")
-  (let [scores
-        (for [[name client] (:clients game-server)]
-          (format "%s %s" name (:score client)))
-        score-text (clojure.string/join "|" scores)]
-    (broadcast-message game-server (format "|INFO|end game|%s|END|" score-text))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn high-score
   "Get the highest score across the clients."
   [clients]
@@ -220,16 +195,34 @@
        (recur (play-hand game-server) max-score))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn run
-  [client-infos max-score]
-  (log/info "Server starting up...")
+(defn start-game
+  [client-infos]
+  (log/info "Starting Game")
   (let [client-list (map #(apply client-proxy/start-client-proxy %) client-infos)
         client-names (shuffle (map :name client-list))
         clients (clients-to-client-map client-list)
+        names (clojure.string/join "|" client-names)
+        message (str "|INFO|start game|" names "|END|")
         game-server (Server. clients client-names 0 0 [])]
-    (-> game-server
-        start-game
-        (play-game max-score)
-        end-game)
-    (shutdown-agents)
-    (log/info "Server shutting down...")))
+    (broadcast-message game-server message)
+    game-server))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn end-game
+  [game-server]
+  (log/info "Ending Game")
+  (let [scores
+        (for [[name client] (:clients game-server)]
+          (format "%s %s" name (:score client)))
+        score-text (clojure.string/join "|" scores)]
+    (broadcast-message game-server (format "|INFO|end game|%s|END|" score-text))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn run
+  [client-infos max-score]
+  (log/info "Server starting up...")
+  (-> (start-game client-infos)
+      (play-game max-score)
+      end-game)
+  (shutdown-agents)
+  (log/info "Server shutting down..."))
