@@ -5,7 +5,7 @@
             [tricks.client-proxy :as client-proxy]
             [tricks.utils :refer [in? time-limited]]))
 
-(defrecord Server [clients client-name-order n-hand n-trick played])
+(defrecord Server [clients client-name-order n-hand n-trick played max-score])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn clients-in-order
@@ -98,17 +98,18 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn play-trick
-  [game-server clients]
-  (if (empty? clients)
-    game-server
-    (let [current-client (first clients)
-          client-name (:name current-client)
-          card (query-client current-client)
-          leading-card (first (:played game-server))]
-
-      (if (valid-card card current-client leading-card)
-        (recur (play-good-card game-server client-name card) (rest clients))
-        (play-bad-card game-server client-name card)))))
+  ([game-server]
+   (play-trick game-server (clients-in-order game-server)))
+  ([game-server clients]
+   (if (empty? clients)
+     game-server
+     (let [current-client (first clients)
+           client-name (:name current-client)
+           card (query-client current-client)
+           leading-card (first (:played game-server))]
+       (if (valid-card card current-client leading-card)
+         (recur (play-good-card game-server client-name card) (rest clients))
+         (play-bad-card game-server client-name card))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn calculate-winner
@@ -137,10 +138,11 @@
       (let [names (clojure.string/join "|" (:client-name-order game-server))
             message (format "|INFO|start trick|%s|%s|END|" (:n-trick game-server) names)]
         (broadcast-message game-server message))
-      (let [clients (clients-in-order game-server)]
-        (-> (play-trick (assoc game-server :played []) clients)
-            calculate-winner
-            recur)))))
+      (-> game-server
+          (assoc :played [])
+          play-trick
+          calculate-winner
+          recur))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn start-hand
@@ -178,32 +180,28 @@
       (update-in [:client-name-order] shuffle)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn play-hand
-  [game-server]
-  (-> game-server
-      start-hand
-      play-tricks
-      end-hand))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn play-game
   "play hands until a client scores 'max-score' points"
-  [game-server max-score]
+  [game-server]
   (let [score (high-score (clients-in-order game-server))]
-     (if (> score max-score)
+     (if (> score (:max-score game-server))
        game-server
-       (recur (play-hand game-server) max-score))))
+       (-> game-server
+           start-hand
+           play-tricks
+           end-hand
+           recur))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn start-game
-  [client-infos]
+  [client-infos max-score]
   (log/info "Starting Game")
   (let [client-list (map #(apply client-proxy/start-client-proxy %) client-infos)
         client-names (shuffle (map :name client-list))
         clients (clients-to-client-map client-list)
         names (clojure.string/join "|" client-names)
         message (str "|INFO|start game|" names "|END|")
-        game-server (Server. clients client-names 0 0 [])]
+        game-server (Server. clients client-names 0 0 [] max-score)]
     (broadcast-message game-server message)
     game-server))
 
@@ -221,8 +219,8 @@
 (defn run
   [client-infos max-score]
   (log/info "Server starting up...")
-  (-> (start-game client-infos)
-      (play-game max-score)
+  (-> (start-game client-infos max-score)
+      (play-game)
       end-game)
   (shutdown-agents)
   (log/info "Server shutting down..."))
