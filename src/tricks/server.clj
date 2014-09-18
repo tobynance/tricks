@@ -55,8 +55,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn high-score
   "Get the highest score across the clients."
-  [clients]
-  (apply max (map :score clients)))
+  [game-server]
+  (apply max (map :score (.values (:clients game-server)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn query-client
@@ -183,7 +183,7 @@
 (defn play-game
   "play hands until a client scores 'max-score' points"
   [game-server]
-  (let [score (high-score (clients-in-order game-server))]
+  (let [score (high-score game-server)]
      (if (> score (:max-score game-server))
        game-server
        (-> game-server
