@@ -16,11 +16,21 @@
   (= (second card1) (second card2)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn get-cards-in-suit
+  [played-cards cards]
+  (filter #(in-same-suit % (first played-cards)) cards))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn get-my-matching-cards
+  [client-state]
+  (get-cards-in-suit (:played client-state) (:cards client-state)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn get-best-card-to-play
   [valid-cards played-cards]
   (let [my-sorted (sort-by face-value valid-cards)
-        played-sorted (sort-by face-value (filter #(in-same-suit % (first played-cards)) played-cards))
-        best-played (face-value (last played-sorted))]
+        in-suit-cards (get-cards-in-suit played-cards played-cards)
+        best-played (face-value (apply max-key face-value in-suit-cards))]
     (if (> best-played (face-value (last my-sorted)))
       (first my-sorted) ;;; the best card I have isn't good enough, so throw out my low card
       (loop [current-card (first my-sorted)
@@ -34,11 +44,16 @@
   [client-state]
   (let [card
         (cond
-          (empty? (:played client-state)) (last (sort-by face-value (:cards client-state)))
-          (empty? (filter #(in-same-suit % (first (:played client-state))) (:cards client-state))) (first (sort-by face-value (:cards client-state)))
+          (empty? (:played client-state))
+            ; I am first player, so play my highest card
+            (last (sort-by face-value (:cards client-state)))
+          (empty? (get-my-matching-cards client-state))
+            ; I don't have any cards in suit, so just play my lowest card
+            (first (sort-by face-value (:cards client-state)))
           :else
-          (let [valid-cards (filter #(in-same-suit % (first (:played client-state))) (:cards client-state))]
-            (get-best-card-to-play valid-cards (:played client-state))))]
+            ; play in suit the highest card that would win, or lowest card in suit if can't win
+            (let [valid-cards (get-my-matching-cards client-state)]
+              (get-best-card-to-play valid-cards (:played client-state))))]
     (log/info "Playing card " card)
     (println (.trim (format "|RESPONSE|card|%s|END|" card)))
     (flush)

@@ -184,13 +184,13 @@
   "play hands until a client scores 'max-score' points"
   [game-server]
   (let [score (high-score game-server)]
-     (if (> score (:max-score game-server))
-       game-server
-       (-> game-server
-           start-hand
-           play-tricks
-           end-hand
-           recur))))
+    (if (> score (:max-score game-server))
+      game-server
+      (-> game-server
+          start-hand
+          play-tricks
+          end-hand
+          recur))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn start-game
